@@ -1,7 +1,7 @@
 [build]
-  publish = "streamlit"
+  publish = "."
   command = "pip install -r requirements.txt && streamlit run main.py"
-  
+
 [[redirects]]
   from = "/*"
   to = "/.netlify/functions/streamlit"
