@@ -19,3 +19,6 @@ venv.bak/
 
 # Streamlit
 .streamlit/
+
+# Ignore virtual environment
+new_env/
