@@ -17,9 +17,28 @@ from code.forecast import rce_pln_forecast
 # Function to create a line chart for rce-pln analysis
 def rce_pln_analysis_chart(data):
     summary_stats, hourly_trends = rce_pln_analysis(data)
-    
+        
     if summary_stats:
-        st.plotly_chart(px.line(data, x='udtczas', y='rce_pln', title='Market Price of Energy Analysis'), use_container_width=True)
+        #st.plotly_chart(px.line(data, x='udtczas', y='rce_pln', title='Market Price of Energy Analysis'), use_container_width=True)
+
+        # Create the plot
+        fig = px.line(data, x='udtczas', y='rce_pln', 
+                      title='PSE Electricity Market Price Analysis in Poland',
+                      labels={'udtczas': 'Time', 'rce_pln': 'PLN/MWh'})
+        
+        # Add the source annotation
+        fig.add_annotation(
+            text="Source: Polskie Sieci Energetyczne",
+            xref="paper", yref="paper",
+            x=1, y=-0.25,  # Position below the plot
+            showarrow=False,
+            xanchor="right",
+            font=dict(size=11)
+        )
+
+        # Display the plot with the source annotation
+        st.plotly_chart(fig, use_container_width=True)
+        
         st.write("### Summary Statistics")
         st.table(pd.DataFrame(list(summary_stats.items()), columns=["Metric", "Value"]))
 
@@ -97,11 +116,11 @@ def rce_pln_forecast_chart(report, start_date, end_date):
 
 def main():
     st.set_page_config(layout="wide")
-    st.title("Market Price of Energy")
+    st.title("Electricity Prices in Poland")
 
     with st.sidebar:
         st.title("Available Reports")
-        report = st.radio("Select report", ["rce-pln analysis", "rce-pln current", "rce-pln forecast"])
+        report = st.radio("Select report", ["rce-pln analysis", "rce-pln current"])
 
     if report == "rce-pln analysis":
         col1, col2 = st.columns(2)
