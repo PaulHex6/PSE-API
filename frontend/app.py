@@ -110,27 +110,30 @@ def display_forecast_options():
         elif forecast_method == "ARIMA":
             col1, col2, col3 = st.columns(3)
             with col1:
-                params['p'] = st.number_input("p (AR term)", min_value=0, max_value=10, value=1)
+                params['p'] = st.number_input("p (AR term)", min_value=0, max_value=10, value=5)
                 st.caption("p: The number of lag observations included in the model.")
             with col2:
-                params['d'] = st.number_input("d (Differencing term)", min_value=0, max_value=2, value=1)
+                params['d'] = st.number_input("d (Differencing term)", min_value=0, max_value=2, value=0)
                 st.caption("d: The number of times that the raw observations are differenced.")
             with col3:
-                params['q'] = st.number_input("q (MA term)", min_value=0, max_value=10, value=1)
+                params['q'] = st.number_input("q (MA term)", min_value=0, max_value=10, value=5)
                 st.caption("q: The size of the moving average window.")
         elif forecast_method == "Holt-Winters":
-            col1 = st.columns(1)
-            with col1[0]:
+            col1, col2 = st.columns(2)
+            with col1:
                 params['seasonal_period'] = st.number_input("Seasonal Period", min_value=1, max_value=365, value=96)
                 st.caption("Seasonal Period: The number of observations per seasonal cycle.")
+            with col2:
+                params['trend'] = st.selectbox("Trend Type", ["add", "mul", "additive", "multiplicative"])
+                st.caption("Trend: The type of trend component in the model.")
     
     return forecast_method, params
 
 # Function to display the forecast chart
 def display_forecast_chart(data, forecast_df):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data.index, y=data['rce_pln'], mode='lines', name='Actual', line=dict(color='blue')))
-    fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df['forecast'], mode='lines', name='Forecast', line=dict(color='red', width=2)))
+    fig.add_trace(go.Scatter(x=data.index, y=data['rce_pln'], mode='lines', name='Actual', line=dict(color='light blue')))
+    fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df['forecast'], mode='lines', name='Forecast', line=dict(color='orange', width=2)))
     fig.update_layout(title='Market Price of Energy Forecast',
                       xaxis=dict(title='Time', tickformat="%H:%M", nticks=48, showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'),
                       yaxis=dict(title='Price [PLN/MWh]', showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'))
@@ -182,8 +185,11 @@ def main():
     elif report == "rce-pln forecast":
         forecast_method, params = display_forecast_options()
         
-        start_date = st.date_input("Select start date", value=pd.to_datetime("2024-07-01"))
-        end_date = st.date_input("Select end date", value=pd.to_datetime("2024-07-03"))
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Select start date", value=pd.to_datetime("2024-07-01"))
+        with col2:
+            end_date = st.date_input("Select end date", value=pd.to_datetime("2024-07-03"))
 
         if st.button("Forecast now"):
             handle_forecasting(forecast_method, params, start_date, end_date)
