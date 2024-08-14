@@ -6,4 +6,3 @@ streamlit==1.24.1
 pytz==2023.3
 plotly==5.23.0
 prophet==1.1.5
-pystan==2.19.1.1
