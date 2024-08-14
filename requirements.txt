@@ -5,6 +5,7 @@ statsmodels==0.14.0
 streamlit==1.24.1
 pytz==2023.3
 plotly==5.14.1
-prophet==1.1
-pystan==2.19.1.1
+cython==0.29.36
 numpy==1.24.0
+cmdstanpy==1.0.4
+prophet==1.1
