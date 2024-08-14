@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 from code.db import init_db, fetch_data_from_db
 from code.pse_api import fetch_data_for_day, fetch_data
 from code.analysis import rce_pln_analysis
-from code.forecast import rce_pln_forecast
+from code.forecast import forecast_sarimax, forecast_arima, forecast_holt_winters
 
 # Function to create a line chart for rce-pln analysis
 def rce_pln_analysis_chart(data):
@@ -73,54 +73,91 @@ def rce_pln_current_chart(data):
     else:
         st.warning("No data to display on the chart.")
 
-# Function to create a line chart for rce-pln forecast
-def rce_pln_forecast_chart(report, start_date, end_date):
-    start_date_1_day_earlier = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
-
-    progress = st.progress(0)
-    status_text = st.empty()
-
-    status_text.text("Please wait... Progress: 0%")
-    progress.progress(0)
+# Function to display forecast configuration options in the UI
+def display_forecast_options():
+    st.subheader("Forecasting Options")
+    forecast_method = st.selectbox("Choose Forecast Method", ["SARIMAX", "ARIMA", "Holt-Winters"])
     
-    progress.progress(10)
-    status_text.text("Please wait... Progress: 10%")
-    data = fetch_data(report, start_date_1_day_earlier, end_date)
+    st.subheader("Method Parameters")
+    params = {}
+
+    with st.container():
+        if forecast_method == "SARIMAX":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                params['p'] = st.number_input("p (AR term)", min_value=0, max_value=10, value=1)
+                st.caption("p: The number of lag observations included in the model.")
+            with col2:
+                params['d'] = st.number_input("d (Differencing term)", min_value=0, max_value=2, value=1)
+                st.caption("d: The number of times that the raw observations are differenced.")
+            with col3:
+                params['q'] = st.number_input("q (MA term)", min_value=0, max_value=10, value=1)
+                st.caption("q: The size of the moving average window.")
+            col4, col5, col6 = st.columns(3)
+            with col4:
+                params['sp'] = st.number_input("Seasonal p", min_value=0, max_value=10, value=1)
+                st.caption("Seasonal p: The number of lag observations in the seasonal component.")
+            with col5:
+                params['sd'] = st.number_input("Seasonal d", min_value=0, max_value=2, value=1)
+                st.caption("Seasonal d: The number of times that the seasonal component is differenced.")
+            with col6:
+                params['sq'] = st.number_input("Seasonal q", min_value=0, max_value=10, value=1)
+                st.caption("Seasonal q: The size of the moving average window in the seasonal component.")
+            col7 = st.columns(1)
+            with col7[0]:
+                params['seasonal_period'] = st.number_input("Seasonal Period", min_value=1, max_value=365, value=96)
+                st.caption("Seasonal Period: The number of observations per seasonal cycle.")
+        elif forecast_method == "ARIMA":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                params['p'] = st.number_input("p (AR term)", min_value=0, max_value=10, value=1)
+                st.caption("p: The number of lag observations included in the model.")
+            with col2:
+                params['d'] = st.number_input("d (Differencing term)", min_value=0, max_value=2, value=1)
+                st.caption("d: The number of times that the raw observations are differenced.")
+            with col3:
+                params['q'] = st.number_input("q (MA term)", min_value=0, max_value=10, value=1)
+                st.caption("q: The size of the moving average window.")
+        elif forecast_method == "Holt-Winters":
+            col1 = st.columns(1)
+            with col1[0]:
+                params['seasonal_period'] = st.number_input("Seasonal Period", min_value=1, max_value=365, value=96)
+                st.caption("Seasonal Period: The number of observations per seasonal cycle.")
     
-    if not data.empty:
-        progress.progress(30)
-        status_text.text("Please wait... Progress: 30%")
-        data['udtczas'] = pd.to_datetime(data['udtczas'])
-        data.set_index('udtczas', inplace=True)
+    return forecast_method, params
 
-        progress.progress(50)
-        status_text.text("Please wait... Progress: 50%")
-        forecast_df = rce_pln_forecast(data)
-        
-        progress.progress(80)
-        status_text.text("Please wait... Progress: 80%")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data.index, y=data['rce_pln'], mode='lines', name='Actual', line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df['forecast'], mode='lines', name='Forecast', line=dict(color='yellow', width=2)))
-        fig.update_layout(title='Market Price of Energy Forecast',
-                          xaxis=dict(title='Time', tickformat="%H:%M", nticks=48, showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'),
-                          yaxis=dict(title='Price [PLN/MWh]', showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'))
-        st.plotly_chart(fig, use_container_width=True)
-        
-        progress.progress(100)
-        status_text.text("Processing complete!")
-    else:
-        st.warning("No data to display on the chart.")
-        progress.progress(100)
-        status_text.text("Processing complete!")
+# Function to display the forecast chart
+def display_forecast_chart(data, forecast_df):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=data.index, y=data['rce_pln'], mode='lines', name='Actual', line=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df['forecast'], mode='lines', name='Forecast', line=dict(color='red', width=2)))
+    fig.update_layout(title='Market Price of Energy Forecast',
+                      xaxis=dict(title='Time', tickformat="%H:%M", nticks=48, showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'),
+                      yaxis=dict(title='Price [PLN/MWh]', showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'))
+    st.plotly_chart(fig, use_container_width=True)
 
+# Function to handle the forecast generation logic with progress bar
+def handle_forecasting(forecast_method, params, start_date, end_date):
+    data = fetch_data("rce-pln", start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+    
+    with st.spinner('Calculating forecast...'):
+        if forecast_method == "SARIMAX":
+            forecast_df = forecast_sarimax(data, **params)
+        elif forecast_method == "ARIMA":
+            forecast_df = forecast_arima(data, **params)
+        elif forecast_method == "Holt-Winters":
+            forecast_df = forecast_holt_winters(data, **params)
+    
+    display_forecast_chart(data, forecast_df)
+    
 def main():
     st.set_page_config(layout="wide")
     st.title("Electricity Prices in Poland")
 
     with st.sidebar:
         st.title("Available Reports")
-        report = st.radio("Select report", ["rce-pln analysis", "rce-pln current"])
+        report = st.radio("Select report", ["rce-pln analysis", "rce-pln current", "rce-pln forecast"])
+
 
     if report == "rce-pln analysis":
         col1, col2 = st.columns(2)
@@ -135,24 +172,22 @@ def main():
 
         data = fetch_data("rce-pln", start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         rce_pln_analysis_chart(data)
+
     elif report == "rce-pln current":
         poland_tz = pytz.timezone('Europe/Warsaw')
         today = datetime.now(poland_tz).strftime('%Y-%m-%d')
         data = fetch_data_for_day("rce-pln", today)
         rce_pln_current_chart(data)
+        
     elif report == "rce-pln forecast":
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("Select start date", value=pd.to_datetime("2024-07-01"), key="start_date")
-        with col2:
-            end_date = st.date_input("Select end date", value=pd.to_datetime("2024-07-03"), key="end_date")
+        forecast_method, params = display_forecast_options()
+        
+        start_date = st.date_input("Select start date", value=pd.to_datetime("2024-07-01"))
+        end_date = st.date_input("Select end date", value=pd.to_datetime("2024-07-03"))
 
-        if start_date > end_date:
-            st.error("Error: End date must fall after start date.")
-            return
+        if st.button("Forecast now"):
+            handle_forecasting(forecast_method, params, start_date, end_date)
 
-        data = fetch_data("rce-pln", start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-        rce_pln_forecast_chart("rce-pln", start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
 if __name__ == "__main__":
     init_db()
