@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 from code.db import init_db, fetch_data_from_db
 from code.pse_api import fetch_data_for_day, fetch_data
 from code.analysis import rce_pln_analysis
-from code.forecast import forecast_sarimax, forecast_arima, forecast_holt_winters
+from code.forecast import forecast_sarimax, forecast_holt_winters, forecast_prophet
 
 # Function to create a line chart for rce-pln analysis
 def rce_pln_analysis_chart(data):
@@ -76,7 +76,7 @@ def rce_pln_current_chart(data):
 # Function to display forecast configuration options in the UI
 def display_forecast_options():
     st.subheader("Forecasting Options")
-    forecast_method = st.selectbox("Choose Forecast Method", ["SARIMAX", "ARIMA", "Holt-Winters"])
+    forecast_method = st.selectbox("Choose Forecast Method", ["SARIMAX", "Prophet", "Holt-Winters"])
     
     st.subheader("Method Parameters")
     params = {}
@@ -107,17 +107,14 @@ def display_forecast_options():
             with col7[0]:
                 params['seasonal_period'] = st.number_input("Seasonal Period", min_value=1, max_value=365, value=96)
                 st.caption("Seasonal Period: The number of observations per seasonal cycle.")
-        elif forecast_method == "ARIMA":
-            col1, col2, col3 = st.columns(3)
+        elif forecast_method == "Prophet":
+            col1, col2 = st.columns(2)
             with col1:
-                params['p'] = st.number_input("p (AR term)", min_value=0, max_value=10, value=5)
-                st.caption("p: The number of lag observations included in the model.")
+                params['seasonality'] = st.selectbox("Seasonality", ["daily", "weekly", "monthly"])
+                st.caption("Seasonality: The type of seasonality to model.")
             with col2:
-                params['d'] = st.number_input("d (Differencing term)", min_value=0, max_value=2, value=0)
-                st.caption("d: The number of times that the raw observations are differenced.")
-            with col3:
-                params['q'] = st.number_input("q (MA term)", min_value=0, max_value=10, value=5)
-                st.caption("q: The size of the moving average window.")
+                params['changepoint_prior_scale'] = st.slider("Changepoint Prior Scale", min_value=0.01, max_value=0.5, value=0.05)
+                st.caption("Changepoint Prior Scale: Flexibility of trend change.")
         elif forecast_method == "Holt-Winters":
             col1, col2 = st.columns(2)
             with col1:
@@ -132,13 +129,14 @@ def display_forecast_options():
 # Function to display the forecast chart
 def display_forecast_chart(data, forecast_df):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data.index, y=data['rce_pln'], mode='lines', name='Actual', line=dict(color='light blue')))
-    fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df['forecast'], mode='lines', name='Forecast', line=dict(color='orange', width=2)))
+    fig.add_trace(go.Scatter(x=data.index, y=data['rce_pln'], mode='lines', name='Actual', line=dict(color='lightblue')))
+    if not forecast_df.empty:
+        fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df['forecast'], mode='lines', name='Forecast', line=dict(color='orange', width=2)))
     fig.update_layout(title='Market Price of Energy Forecast',
                       xaxis=dict(title='Time', tickformat="%H:%M", nticks=48, showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'),
                       yaxis=dict(title='Price [PLN/MWh]', showgrid=True, gridwidth=0.5, gridcolor='DarkGrey'))
     st.plotly_chart(fig, use_container_width=True)
-
+    
 # Function to handle the forecast generation logic with progress bar
 def handle_forecasting(forecast_method, params, start_date, end_date):
     data = fetch_data("rce-pln", start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
@@ -146,13 +144,16 @@ def handle_forecasting(forecast_method, params, start_date, end_date):
     with st.spinner('Calculating forecast...'):
         if forecast_method == "SARIMAX":
             forecast_df = forecast_sarimax(data, **params)
-        elif forecast_method == "ARIMA":
-            forecast_df = forecast_arima(data, **params)
+        elif forecast_method == "Prophet":
+            forecast_df = forecast_prophet(data, **params)
         elif forecast_method == "Holt-Winters":
             forecast_df = forecast_holt_winters(data, **params)
     
-    display_forecast_chart(data, forecast_df)
-    
+    if 'forecast_df' in locals():
+        display_forecast_chart(data, forecast_df)
+    else:
+        st.error("Forecasting failed. Please check the data and parameters.")
+
 def main():
     st.set_page_config(layout="wide")
     st.title("Electricity Prices in Poland")

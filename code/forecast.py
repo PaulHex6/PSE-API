@@ -4,8 +4,8 @@
 
 import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from prophet import Prophet
 import streamlit as st
 
 # Function to generate forecast using SARIMAX model with progress bar
@@ -18,23 +18,33 @@ def forecast_sarimax(data, p, d, q, sp, sd, sq, seasonal_period):
         model = SARIMAX(data['rce_pln'], order=(p, d, q), seasonal_order=(sp, sd, sq, seasonal_period))
         model_fit = model.fit()
         progress_bar.progress(80)
-        forecast_df = generate_forecast(model_fit, data)
+        forecast_df = generate_forecast_sarimax_holt(model_fit, data)
         progress_bar.progress(100)
         return forecast_df
     else:
         return pd.DataFrame()
 
-# Function to generate forecast using ARIMA model with progress bar
-def forecast_arima(data, p, d, q):
+# Function to generate forecast using Prophet model with progress bar
+def forecast_prophet(data, seasonality, changepoint_prior_scale):
     if not data.empty:
-        data['udtczas'] = pd.to_datetime(data['udtczas'])
-        data.set_index('udtczas', inplace=True)
+        data = data.rename(columns={'udtczas': 'ds', 'rce_pln': 'y'})
         progress_bar = st.progress(0)
         progress_bar.progress(10)
-        model = ARIMA(data['rce_pln'], order=(p, d, q))
-        model_fit = model.fit()
+        model = Prophet(changepoint_prior_scale=changepoint_prior_scale)
+        if seasonality == "daily":
+            model.add_seasonality(name='daily', period=1, fourier_order=15)
+        elif seasonality == "weekly":
+            model.add_seasonality(name='weekly', period=7, fourier_order=10)
+        elif seasonality == "monthly":
+            model.add_seasonality(name='monthly', period=30.5, fourier_order=5)
+        
+        model.fit(data)
+        progress_bar.progress(50)
+        future = model.make_future_dataframe(periods=96, freq='15min')
+        forecast = model.predict(future)
         progress_bar.progress(80)
-        forecast_df = generate_forecast(model_fit, data)
+        forecast_df = forecast[['ds', 'yhat']].rename(columns={'ds': 'udtczas', 'yhat': 'forecast'})
+        forecast_df.set_index('udtczas', inplace=True)
         progress_bar.progress(100)
         return forecast_df
     else:
@@ -58,8 +68,8 @@ def forecast_holt_winters(data, seasonal_period, trend):
     else:
         return pd.DataFrame()
 
-# Common function to generate and format forecast results for SARIMAX and ARIMA
-def generate_forecast(model_fit, data):
+# Common function to generate and format forecast results for SARIMAX and Holt-Winters
+def generate_forecast_sarimax_holt(model_fit, data):
     future_steps = 96  # Assuming forecast for next 24 hours with 15-minute intervals
     forecast = model_fit.get_forecast(steps=future_steps)
     forecast_df = forecast.conf_int()
