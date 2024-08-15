@@ -4,11 +4,8 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-env/
+*env/
 venv/
-ENV/
-env.bak/
-venv.bak/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -20,5 +17,5 @@ venv.bak/
 # Streamlit
 .streamlit/
 
-# Ignore virtual environment
-new_env/
+#test files
+translations/
